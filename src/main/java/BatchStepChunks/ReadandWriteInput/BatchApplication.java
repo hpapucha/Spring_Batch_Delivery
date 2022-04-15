@@ -10,10 +10,13 @@ import org.springframework.batch.item.database.PagingQueryProvider;
 import org.springframework.batch.item.database.builder.JdbcBatchItemWriterBuilder;
 import org.springframework.batch.item.database.builder.JdbcPagingItemReaderBuilder;
 import org.springframework.batch.item.database.support.SqlPagingQueryProviderFactoryBean;
+import org.springframework.batch.item.json.JacksonJsonObjectMarshaller;
+import org.springframework.batch.item.json.builder.JsonFileItemWriterBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.io.FileSystemResource;
 
 import javax.sql.DataSource;
 
@@ -41,15 +44,14 @@ public class BatchApplication {
 	//During chunk based processing ItemWriter is used to write items the job has read and processed to a data store
 	@Bean
 	public ItemWriter<Order> itemWriter() {
-		//JdbcBatchItemWriterBuilder is for writing in a database
-		return new JdbcBatchItemWriterBuilder<Order>()
-				//Data source that allows to connect to db
-				.dataSource(dataSource)
-				//specify sql statement to insert into the table
-				.sql(INSERT_ORDER_SQL)
-				.beanMapped()
-				//PreparedStatement is used only if the sql parameters are unnamed
-			//	.itemPreparedStatementSetter(new OrderItemPreparedStatementSetter())
+		//Writing to a JSON file
+		return new JsonFileItemWriterBuilder<Order>()
+				//Jackson is a deserialization/ seriazation framework turning java object to JSON and vice versa
+				.jsonObjectMarshaller(new JacksonJsonObjectMarshaller<Order>())
+				//Specify where we write the JSON file using a FileSystemResource constructor
+				.resource(new FileSystemResource("/data/shipped_orders_output.json"))
+				//Give the ItemWriter name
+				.name("jsonItemWriter")
 				.build();
 	}
 
