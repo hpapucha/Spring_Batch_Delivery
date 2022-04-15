@@ -38,7 +38,6 @@ public class BatchApplication {
 	public DataSource dataSource;
 
 
-
 	@Bean public PagingQueryProvider queryProvider() throws Exception{
 		SqlPagingQueryProviderFactoryBean factory = new SqlPagingQueryProviderFactoryBean();
 		factory.setSelectClause("select order_id, first_name, last_name, email, cost, item_id, item_name, ship_date");
@@ -55,9 +54,9 @@ public class BatchApplication {
 				.name("jdbcCursorItemReader")
 				.queryProvider(queryProvider())
 				.rowMapper(new OrderRowMapper())
+				.pageSize(10)
 				.build();
 	}
-
 
 	//Allows itemreader to connect to db not thread safe
 	@Bean
@@ -97,10 +96,8 @@ public class BatchApplication {
 	}
 	@Bean
 	public Step chunkBasedStep() throws Exception {
-		return this.stepBuilderFactory.get("chunkBasedStep")//supplying chunk
-				.<Order, Order>chunk(3)
-				.reader(itemReader())
-				.writer(new ItemWriter<Order>() {
+		return this.stepBuilderFactory.get("chunkBasedStep").<Order, Order>chunk(10).reader(itemReader())
+				.writer(new ItemWriter<Order>(){
 
 					@Override
 					public void write(List<? extends Order> items) throws Exception {
