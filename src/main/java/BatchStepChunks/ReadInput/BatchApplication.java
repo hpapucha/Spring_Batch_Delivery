@@ -1,5 +1,6 @@
 package BatchStepChunks.ReadInput;
 
+import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
@@ -11,7 +12,10 @@ import org.springframework.batch.item.database.builder.JdbcCursorItemReaderBuild
 import org.springframework.batch.item.database.builder.JdbcPagingItemReaderBuilder;
 import org.springframework.batch.item.database.support.SqlPagingQueryProviderFactoryBean;
 import org.springframework.batch.item.file.FlatFileItemReader;
+import org.springframework.batch.item.file.FlatFileItemWriter;
 import org.springframework.batch.item.file.mapping.DefaultLineMapper;
+import org.springframework.batch.item.file.transform.BeanWrapperFieldExtractor;
+import org.springframework.batch.item.file.transform.DelimitedLineAggregator;
 import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
@@ -25,7 +29,8 @@ import java.util.List;
 @SpringBootApplication
 public class BatchApplication {
 
-	public static String[] tokens = new String[] {"order_id", "first_name", "last_name", "email", "cost", "item_id", "item_name", "ship_date"};
+	public static String[] names = new String[] { "orderId", "firstName", "lastName", "email", "cost", "itemId",
+			"itemName", "shipDate" };
 
 	public static String ORDER_SQL = "select order_id, first_name, last_name, email, cost, item_id, item_name, ship_date "
 			+ "from SHIPPED_ORDER order by order_id";
@@ -36,10 +41,31 @@ public class BatchApplication {
 	public StepBuilderFactory stepBuilderFactory;
 	@Autowired
 	public DataSource dataSource;
+	//During chunk based processing ItemWriter is used to write items the job has read and processed to a data store
+	@Bean
+	public ItemWriter<Order> itemWriter() {
+		FlatFileItemWriter<Order> itemWriter = new FlatFileItemWriter<Order>();
+		//Specify where to write the information to csv
+		itemWriter.setResource(new FileSystemResource("/data/shipped_orders_output.csv"));
+		//Instructions on how to take a pojo and turn to line in a csv file
+		DelimitedLineAggregator<Order> aggregator = new DelimitedLineAggregator<Order>();
+		//Specify separate by a comma
+		aggregator.setDelimiter(",");
+		//Used to pull values from the fields from pojo
+		BeanWrapperFieldExtractor<Order> fieldExtractor = new BeanWrapperFieldExtractor<Order>();
+		fieldExtractor.setNames(names);
+		//Extract fields
+		aggregator.setFieldExtractor(fieldExtractor);
+		//Separate by comma
+		itemWriter.setLineAggregator(aggregator);
+		return itemWriter; //Write to csv file
+	}
 
 
-	@Bean public PagingQueryProvider queryProvider() throws Exception{
+	@Bean
+	public PagingQueryProvider queryProvider() throws Exception {
 		SqlPagingQueryProviderFactoryBean factory = new SqlPagingQueryProviderFactoryBean();
+
 		factory.setSelectClause("select order_id, first_name, last_name, email, cost, item_id, item_name, ship_date");
 		factory.setFromClause("from SHIPPED_ORDER");
 		factory.setSortKey("order_id");
@@ -58,53 +84,15 @@ public class BatchApplication {
 				.build();
 	}
 
-	//Allows itemreader to connect to db not thread safe
-	@Bean
-	public ItemReader<Order> itemReader(){
-		return new JdbcCursorItemReaderBuilder<Order>()
-				.dataSource(dataSource)
-				.name("jdbcCursorItemReader")
-				.sql(ORDER_SQL)
-				//RowMapper maps rows from db to our pojo
-				.rowMapper(new OrderRowMapper())
-				.build();
-	}
-
-
-	//Read data from csv file
-	@Bean
-	public ItemReader<Order> itemReader(){
-		FlatFileItemReader<Order> itemReader = new FlatFileItemReader<Order>();
-		//skip first line that contains headers
-		itemReader.setLinesToSkip(1);
-		//finding the data file
-		itemReader.setResource(new FileSystemResource("/data/shipped_orders.csv"));
-		//Proccesing data as it reads it with defaultlinemapper
-		DefaultLineMapper<Order> lineMapper = new DefaultLineMapper<Order>();
-		//This breaks lines by commas as delimiter
-		DelimitedLineTokenizer tokenizer = new DelimitedLineTokenizer();
-		//Tell the name of the columns by passing an array
-		tokenizer.setNames(tokens);
-		//Set line tokenizer on our line mapper
-		lineMapper.setLineTokenizer(tokenizer);
-		//Create order object passed by delimitedLineTokenizer
-		lineMapper.setFieldSetMapper(new OrderFieldSetMapper());
-		//Set lineMapper on our itemReader
-		itemReader.setLineMapper(lineMapper);
-		return itemReader;
-
-	}
 	@Bean
 	public Step chunkBasedStep() throws Exception {
 		return this.stepBuilderFactory.get("chunkBasedStep").<Order, Order>chunk(10).reader(itemReader())
-				.writer(new ItemWriter<Order>(){
+				.writer(itemWriter()).build();
+	}
 
-					@Override
-					public void write(List<? extends Order> items) throws Exception {
-						System.out.println(String.format("Receiced a list of size: %s" , items.size()));
-						items.forEach(System.out::println);
-					}
-				}).build();
+	@Bean
+	public Job job() throws Exception {
+		return this.jobBuilderFactory.get("job").start(chunkBasedStep()).build();
 	}
 
 	public static void main(String[] args) {
