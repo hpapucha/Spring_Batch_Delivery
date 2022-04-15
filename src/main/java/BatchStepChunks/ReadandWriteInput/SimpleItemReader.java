@@ -1,4 +1,4 @@
-package BatchStepChunks.ReadInput;
+package BatchStepChunks.ReadandWriteInput;
 
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.NonTransientResourceException;

@@ -1,4 +1,4 @@
-package BatchStepChunks.ReadInput;
+package BatchStepChunks.ReadandWriteInput;
 
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
@@ -6,34 +6,31 @@ import org.springframework.batch.core.configuration.annotation.JobBuilderFactory
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
-import org.springframework.batch.item.database.JdbcCursorItemReader;
 import org.springframework.batch.item.database.PagingQueryProvider;
-import org.springframework.batch.item.database.builder.JdbcCursorItemReaderBuilder;
+import org.springframework.batch.item.database.builder.JdbcBatchItemWriterBuilder;
 import org.springframework.batch.item.database.builder.JdbcPagingItemReaderBuilder;
 import org.springframework.batch.item.database.support.SqlPagingQueryProviderFactoryBean;
-import org.springframework.batch.item.file.FlatFileItemReader;
-import org.springframework.batch.item.file.FlatFileItemWriter;
-import org.springframework.batch.item.file.mapping.DefaultLineMapper;
-import org.springframework.batch.item.file.transform.BeanWrapperFieldExtractor;
-import org.springframework.batch.item.file.transform.DelimitedLineAggregator;
-import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
-import org.springframework.core.io.FileSystemResource;
 
 import javax.sql.DataSource;
-import java.util.List;
 
 @SpringBootApplication
 public class BatchApplication {
+
+	//Reads from a table named Shipped_Order and writes to table Shipped_order_output
 
 	public static String[] names = new String[] { "orderId", "firstName", "lastName", "email", "cost", "itemId",
 			"itemName", "shipDate" };
 
 	public static String ORDER_SQL = "select order_id, first_name, last_name, email, cost, item_id, item_name, ship_date "
 			+ "from SHIPPED_ORDER order by order_id";
+
+	public static String INSERT_ORDER_SQL = "insert into "
+			+ "SHIPPED_ORDER_OUTPUT(order_id, first_name, last_name, email, item_id, item_name, cost, ship_date)"
+			+ " values(:orderId,:firstName,:lastName,:email,:itemId,:itemName,:cost,:shipDate)";
 
 	@Autowired
 	public JobBuilderFactory jobBuilderFactory;
@@ -44,21 +41,16 @@ public class BatchApplication {
 	//During chunk based processing ItemWriter is used to write items the job has read and processed to a data store
 	@Bean
 	public ItemWriter<Order> itemWriter() {
-		FlatFileItemWriter<Order> itemWriter = new FlatFileItemWriter<Order>();
-		//Specify where to write the information to csv
-		itemWriter.setResource(new FileSystemResource("/data/shipped_orders_output.csv"));
-		//Instructions on how to take a pojo and turn to line in a csv file
-		DelimitedLineAggregator<Order> aggregator = new DelimitedLineAggregator<Order>();
-		//Specify separate by a comma
-		aggregator.setDelimiter(",");
-		//Used to pull values from the fields from pojo
-		BeanWrapperFieldExtractor<Order> fieldExtractor = new BeanWrapperFieldExtractor<Order>();
-		fieldExtractor.setNames(names);
-		//Extract fields
-		aggregator.setFieldExtractor(fieldExtractor);
-		//Separate by comma
-		itemWriter.setLineAggregator(aggregator);
-		return itemWriter; //Write to csv file
+		//JdbcBatchItemWriterBuilder is for writing in a database
+		return new JdbcBatchItemWriterBuilder<Order>()
+				//Data source that allows to connect to db
+				.dataSource(dataSource)
+				//specify sql statement to insert into the table
+				.sql(INSERT_ORDER_SQL)
+				.beanMapped()
+				//PreparedStatement is used only if the sql parameters are unnamed
+			//	.itemPreparedStatementSetter(new OrderItemPreparedStatementSetter())
+				.build();
 	}
 
 

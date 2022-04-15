@@ -1,4 +1,4 @@
-package BatchStepChunks.ReadInput;
+package BatchStepChunks.ReadandWriteInput;
 
 import org.springframework.batch.item.file.transform.FieldSet;
 import org.springframework.validation.BindException;

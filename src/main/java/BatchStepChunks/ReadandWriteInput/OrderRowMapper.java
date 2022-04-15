@@ -1,4 +1,4 @@
-package BatchStepChunks.ReadInput;
+package BatchStepChunks.ReadandWriteInput;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
